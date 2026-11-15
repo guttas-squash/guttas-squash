@@ -1,0 +1,233 @@
+
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guttas Squash</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#101914;--panel:#1b2921;--green:#a5e6a8;--muted:#a8b8ac}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:#f4f7f4;font-family:Arial,sans-serif}
+header{background:#14251d;padding:30px 20px;text-align:center;border-bottom:1px solid #304536}
+header h1{font-size:30px;margin:5px;color:white;letter-spacing:2px}
+header p{color:var(--green);font-size:12px;letter-spacing:2px}
+main{max-width:760px;margin:25px auto;padding:0 16px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stat,.panel{background:var(--panel);padding:17px;border-radius:13px}
+.stat strong{display:block;font-size:25px;color:var(--green)}
+.stat span{font-size:12px;color:var(--muted)}
+nav{display:flex;gap:8px;margin:20px 0}
+button,select{font:inherit}
+nav button{flex:1;padding:12px 5px;border:1px solid #405447;border-radius:9px;background:var(--panel);color:white;cursor:pointer}
+nav button.active,.primary{background:#28643c;color:white;border-color:#28643c}
+h2{font-size:20px;margin-top:0}
+.panel{margin-bottom:15px}
+.muted{color:var(--muted);font-size:13px}
+.player{display:flex;align-items:center;justify-content:space-between;padding:13px;background:#26382c;border-radius:9px;margin:8px 0}
+.player b{font-size:16px}
+.points{color:var(--green);font-weight:bold;font-size:20px}
+select{width:100%;padding:13px;border-radius:9px;background:#26382c;color:white;border:1px solid #506354;margin:8px 0 16px}
+label.check{display:flex;align-items:center;gap:12px;background:#26382c;padding:13px;border-radius:9px;margin:7px 0;cursor:pointer}
+input[type=checkbox]{width:19px;height:19px;accent-color:#80d58b}
+button.primary{width:100%;padding:14px;border:0;border-radius:9px;font-weight:bold;cursor:pointer;margin-top:12px}
+button:disabled{opacity:.5;cursor:not-allowed}
+.section{display:none}.section.active{display:block}
+.match{display:flex;justify-content:space-between;gap:10px;padding:13px 4px;border-bottom:1px solid #34443a}
+.match span{color:var(--green);font-weight:bold}
+.notice{padding:12px;border-radius:9px;background:#26382c;margin:12px 0;color:var(--green)}
+.error{color:#ffaaaa}
+footer{text-align:center;color:#718176;font-size:12px;padding:25px}
+@media(max-width:430px){header h1{font-size:25px}nav button{font-size:12px}}
+</style>
+</head>
+<body>
+<header>
+<p>DEN UOFFISIELLE VERDENSRANKINGEN</p>
+<h1>🏆 GUTTAS SQUASH</h1>
+<p>SESONGEN 2026/27</p>
+</header>
+<main>
+<div class="stats">
+<div class="stat"><strong>6</strong><span>Spillere</span></div>
+<div class="stat"><strong id="sessions">0</strong><span>Registreringer</span></div>
+<div class="stat"><strong id="total">0</strong><span>Seire totalt</span></div>
+</div>
+
+<nav>
+<button class="active" data-tab="ranking">🏆 Ranking</button>
+<button data-tab="register">＋ Registrer</button>
+<button data-tab="head">⚔️ Innbyrdes</button>
+</nav>
+
+<section id="ranking" class="section active">
+<div class="panel">
+<h2>🏆 Leaderboard</h2>
+<p class="muted">Ett poeng for hver motstander du slår.</p>
+<div id="leaderboard">Laster resultater ...</div>
+</div>
+</section>
+
+<section id="register" class="section">
+<div class="panel">
+<h2>Registrer squashøkt</h2>
+<p class="muted">Velg spilleren som vant, og kryss av alle han slo på økten.</p>
+<label for="winner">Hvem vant?</label>
+<select id="winner"></select>
+<h3>Hvem slo han?</h3>
+<div id="opponents"></div>
+<div class="notice">Poeng for denne økten: <strong id="points">0</strong></div>
+<button class="primary" id="save">Registrer resultat</button>
+<p id="message" class="muted"></p>
+</div>
+</section>
+
+<section id="head" class="section">
+<div class="panel">
+<h2>⚔️ Innbyrdes oppgjør</h2>
+<p class="muted">Antall seire mellom hver spiller.</p>
+<div id="headtohead">Laster ...</div>
+</div>
+<div class="panel">
+<h2>Siste registreringer</h2>
+<div id="history">Laster ...</div>
+</div>
+</section>
+</main>
+<footer>GUTTAS SQUASH · ALLTID KAMP OM TRONEN 🎾</footer>
+
+<script>
+const PLAYERS = [
+"Pedro Rosales",
+"Knut Seemann-Berg",
+"Hans-Christian Norveel",
+"Carl-Magnus Forssell",
+"Fabian Utigard",
+"Fabian Forssell"
+];
+
+const SUPABASE_URL = "https://qgwdpnfbnrzmyzipljgi.supabase.co";
+const SUPABASE_KEY = "sb_publishable_Q3QJSc23tlh9cz3zYVAGdQ__G5-QXtw";
+const db = window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+let results = [];
+
+document.querySelectorAll("nav button").forEach(button=>{
+  button.addEventListener("click",()=>{
+    document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
+    button.classList.add("active");
+    document.getElementById(button.dataset.tab).classList.add("active");
+  });
+});
+
+const winnerSelect=document.getElementById("winner");
+const opponents=document.getElementById("opponents");
+
+PLAYERS.forEach(p=>{
+  winnerSelect.add(new Option(p,p));
+  const label=document.createElement("label");
+  label.className="check";
+  const input=document.createElement("input");
+  input.type="checkbox";
+  input.value=p;
+  input.addEventListener("change",updatePoints);
+  label.append(input,document.createTextNode(p));
+  opponents.append(label);
+});
+
+winnerSelect.addEventListener("change",()=>{
+  document.querySelectorAll("#opponents input").forEach(c=>{
+    c.checked=false;
+    c.disabled=c.value===winnerSelect.value;
+    c.parentElement.style.opacity=c.disabled?".4":"1";
+  });
+  updatePoints();
+});
+
+function updatePoints(){
+  const n=[...document.querySelectorAll("#opponents input:checked")].length;
+  document.getElementById("points").textContent=n;
+  document.getElementById("save").disabled=n===0;
+}
+winnerSelect.dispatchEvent(new Event("change"));
+
+async function loadResults(){
+  const {data,error}=await db.from("squash_results")
+    .select("*").order("created_at",{ascending:false});
+  if(error){
+    document.getElementById("leaderboard").textContent="Kunne ikke hente resultater: "+error.message;
+    return;
+  }
+  results=data||[];
+  render();
+}
+
+function render(){
+  const scores=PLAYERS.map(name=>({
+    name,
+    points:results.filter(r=>r.winner===name).length
+  })).sort((a,b)=>b.points-a.points||a.name.localeCompare(b.name));
+
+  const sessions=new Set(results.map(r=>r.session_id));
+  document.getElementById("sessions").textContent=sessions.size;
+  document.getElementById("total").textContent=results.length;
+
+  document.getElementById("leaderboard").innerHTML=scores.map((p,i)=>`
+    <div class="player">
+      <b>${["🥇","🥈","🥉"][i]||String(i+1)+ "."} ${p.name}</b>
+      <span class="points">${p.points} poeng</span>
+    </div>`).join("");
+
+  let pairs=[];
+  for(let i=0;i<PLAYERS.length;i++){
+    for(let j=i+1;j<PLAYERS.length;j++){
+      const a=PLAYERS[i],b=PLAYERS[j];
+      const winsA=results.filter(r=>r.winner===a&&r.opponent===b).length;
+      const winsB=results.filter(r=>r.winner===b&&r.opponent===a).length;
+      pairs.push(`<div class="match"><b>${a}</b><span>${winsA} – ${winsB}</span><b>${b}</b></div>`);
+    }
+  }
+  document.getElementById("headtohead").innerHTML=pairs.join("");
+
+  const groups={};
+  results.forEach(r=>{
+    if(!groups[r.session_id])groups[r.session_id]={winner:r.winner,opponents:[],date:r.created_at};
+    groups[r.session_id].opponents.push(r.opponent);
+  });
+  const history=Object.values(groups);
+  document.getElementById("history").innerHTML=history.length
+    ?history.map(g=>`<div class="match"><div><b>${g.winner}</b><div class="muted">Slo ${g.opponents.join(", ")}</div></div><span>+${g.opponents.length}</span></div>`).join("")
+    :'<p class="muted">Ingen resultater registrert ennå.</p>';
+}
+
+document.getElementById("save").addEventListener("click",async()=>{
+  const winner=winnerSelect.value;
+  const beaten=[...document.querySelectorAll("#opponents input:checked")].map(c=>c.value);
+  const message=document.getElementById("message");
+  const save=document.getElementById("save");
+  if(!beaten.length)return;
+  save.disabled=true;
+  message.textContent="Lagrer resultat ...";
+  const session_id=crypto.randomUUID();
+  const rows=beaten.map(opponent=>({session_id,winner,opponent}));
+  const {error}=await db.from("squash_results").insert(rows);
+  if(error){
+    message.textContent="Feil ved lagring: "+error.message;
+    message.className="muted error";
+    save.disabled=false;
+    return;
+  }
+  document.querySelectorAll("#opponents input").forEach(c=>c.checked=false);
+  updatePoints();
+  message.textContent="Resultatet er lagret! 🎉";
+  message.className="notice";
+  await loadResults();
+  save.disabled=false;
+});
+
+loadResults();
+</script>
+</body>
+</html>
